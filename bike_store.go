@@ -30,15 +30,15 @@ func newBikeStore(path string) (*bikeStore, error) {
 		return nil, err
 	}
 
-	if _, err = db.Exec(`CREATE TABLE IF NOT EXISTS bike(id INTEGER, name TEXT NOT NULL, PRIMARY KEY(id))`); err != nil {
+	if _, err = db.Exec(`CREATE TABLE IF NOT EXISTS bike(name TEXT NOT NULL)`); err != nil {
 		return nil, err
 	}
 
-	if _, err = db.Exec("CREATE TABLE IF NOT EXISTS component(id INTEGER, bike_id INTEGER, name TEXT NOT NULL, PRIMARY KEY(id))"); err != nil {
+	if _, err = db.Exec("CREATE TABLE IF NOT EXISTS component(bike_rowid INTEGER, name TEXT NOT NULL)"); err != nil {
 		return nil, err
 	}
 
-	if _, err = db.Exec("CREATE INDEX IF NOT EXISTS component_bike_id_idx ON component(bike_id)"); err != nil {
+	if _, err = db.Exec("CREATE INDEX IF NOT EXISTS component_bike_rowid_idx ON component(bike_rowid)"); err != nil {
 		return nil, err
 	}
 
@@ -49,13 +49,13 @@ func newBikeStore(path string) (*bikeStore, error) {
 
 // GetBikes Get same bikes
 func (s *bikeStore) GetBikes(limit, offset uint64, bikes []*bike) error {
-	rows, err := s.db.Query("SELECT id, name FROM bike LIMIT ? OFFSET ?", limit, offset)
+	rows, err := s.db.Query("SELECT rowid, name FROM bike LIMIT ? OFFSET ?", limit, offset)
 	if err != nil {
 		return err
 	}
 	defer rows.Close()
 
-	ids := []string{}
+	bikeIds := []string{}
 
 	for rows.Next() {
 		b := bike{}
@@ -66,10 +66,10 @@ func (s *bikeStore) GetBikes(limit, offset uint64, bikes []*bike) error {
 
 		bikes = append(bikes, &b)
 
-		ids = append(ids, fmt.Sprint(b.ID))
+		bikeIds = append(bikeIds, fmt.Sprint(b.ID))
 	}
 
-	rows, err = s.db.Query(fmt.Sprintf("SELECT id, bike_id, name FROM component WHERE bike_id IN (%s)", strings.Join(ids, ",")))
+	rows, err = s.db.Query(fmt.Sprintf("SELECT rowid, bike_rowid, name FROM component WHERE bike_rowid IN (%s)", strings.Join(bikeIds, ",")))
 	if err != nil {
 		return err
 	}
@@ -100,11 +100,11 @@ func (s *bikeStore) GetBikes(limit, offset uint64, bikes []*bike) error {
 
 // GetBike Get a bike
 func (s *bikeStore) GetBike(id uint64, b *bike) error {
-	if err := s.db.QueryRow("SELECT id, name FROM bike WHERE id = ?", id).Scan(&b.ID, &b.Name); err != nil {
+	if err := s.db.QueryRow("SELECT rowid, name FROM bike WHERE rowid = ?", id).Scan(&b.ID, &b.Name); err != nil {
 		return err
 	}
 
-	rows, err := s.db.Query("SELECT id, bike_id, name FROM component WHERE bike_id = ?", id)
+	rows, err := s.db.Query("SELECT rowid, bike_rowid, name FROM component WHERE bike_rowid = ?", id)
 	if err != nil {
 		return err
 	}
@@ -135,26 +135,35 @@ func (s *bikeStore) StoreBikes(bikes []*bike) error {
 		return err
 	}
 
-	stmt, err := tx.Prepare("INSERT OR REPLACE INTO bike(id, name) VALUES(?, ?)")
+	stmt, err := tx.Prepare("INSERT INTO bike(name) VALUES(?)")
 	if err != nil {
+		tx.Rollback()
 		return err
 	}
 
 	for _, b := range bikes {
-		if _, err := stmt.Exec(b.ID, b.Name); err != nil {
+		if _, err := stmt.Exec(b.Name); err != nil {
 			tx.Rollback()
 			return err
 		}
 	}
 
-	stmt, err = tx.Prepare("INSERT OR REPLACE INTO component(id, bike_id, name) VALUES(?, ?, ?)")
+	var id uint64
+
+	if err := tx.QueryRow("SELECT last_insert_rowid()").Scan(&id); err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	stmt, err = tx.Prepare("INSERT INTO component(bike_rowid, name) VALUES(?, ?)")
 	if err != nil {
+		tx.Rollback()
 		return err
 	}
 
 	for _, b := range bikes {
 		for _, c := range b.Components {
-			if _, err := stmt.Exec(c.ID, c.BikeID, c.Name); err != nil {
+			if _, err := stmt.Exec(id, c.Name); err != nil {
 				tx.Rollback()
 				return err
 			}
@@ -171,12 +180,12 @@ func (s *bikeStore) DeleteRange(min, max uint64) error {
 		return err
 	}
 
-	if _, err := s.db.Exec("DELETE FROM bike WHERE id BETWEEN ? AND ?", min, max); err != nil {
+	if _, err := s.db.Exec("DELETE FROM bike WHERE rowid BETWEEN ? AND ?", min, max); err != nil {
 		tx.Rollback()
 		return err
 	}
 
-	if _, err := s.db.Exec("DELETE FROM component WHERE bike_id BETWEEN ? AND ?", min, max); err != nil {
+	if _, err := s.db.Exec("DELETE FROM component WHERE bike_rowid BETWEEN ? AND ?", min, max); err != nil {
 		tx.Rollback()
 		return err
 	}

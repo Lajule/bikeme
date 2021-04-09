@@ -1,0 +1,16 @@
+{
+    "node_id": "node1",
+    "trailing_logs": 50,
+    "log_store_file": "log.db",
+    "log_cache_size": 512,
+    "snapshot_dir": "snapshots",
+    "snapshot_interval": "1m",
+    "snapshot_threshold": 20,
+    "snapshot_retain": 10,
+    "raft_addr": "127.0.0.1:3000",
+    "max_pool": 3,
+    "tcp_timeout": "3s",
+    "bike_store_file": "bike.db",
+    "api_addr": "127.0.0.1:8000",
+    "graceful": "5s"
+}

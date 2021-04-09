@@ -2,8 +2,9 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
-	"io"
+	"fmt"
 	"log"
 	"net"
 	"net/http"
@@ -13,50 +14,55 @@ import (
 
 	"github.com/bmizerany/pat"
 	"github.com/hashicorp/raft"
-	"github.com/spf13/viper"
 )
 
 type config struct {
-	NodeID            string        `mapstructure:"node_id"`
-	TrailingLogs      uint64        `mapstructure:"trailing_logs"`
-	LogStoreFile      string        `mapstructure:"log_store_file"`
-	LogCacheSize      int           `mapstructure:"log_cache_size"`
-	SnapshotDir       string        `mapstructure:"snapshot_dir"`
-	SnapshotInterval  time.Duration `mapstructure:"snapshot_interval"`
-	SnapshotThreshold uint64        `mapstructure:"snapshot_threshold"`
-	SnapshotRetain    int           `mapstructure:"snapshot_retain"`
-	RaftAddr          string        `mapstructure:"raft_addr"`
-	MaxPool           int           `mapstructure:"max_pool"`
-	TCPTimeout        time.Duration `mapstructure:"tcp_timeout"`
-	BikeStoreFile     string        `mapstructure:"bike_store_file"`
-	APIAddr           string        `mapstructure:"api_addr"`
-	Graceful          time.Duration `mapstructure:"graceful"`
+	NodeID            string `json:"node_id"`
+	TrailingLogs      uint64 `json:"trailing_logs"`
+	LogStoreFile      string `json:"log_store_file"`
+	LogCacheSize      int    `json:"log_cache_size"`
+	SnapshotDir       string `json:"snapshot_dir"`
+	SnapshotInterval  string `json:"snapshot_interval"`
+	SnapshotThreshold uint64 `json:"snapshot_threshold"`
+	SnapshotRetain    int    `json:"snapshot_retain"`
+	RaftAddr          string `json:"raft_addr"`
+	MaxPool           int    `json:"max_pool"`
+	TCPTimeout        string `json:"tcp_timeout"`
+	BikeStoreFile     string `json:"bike_store_file"`
+	APIAddr           string `json:"api_addr"`
+	Graceful          string `json:"graceful"`
 }
 
 var (
-	configFile string
-	bootstrap  bool
+	cfg     *config
+	cluster *raft.Raft
+	bs      *bikeStore
+	cfgFile string
 )
 
 func init() {
-	flag.StringVar(&configFile, "config", "config.yaml", "Config filename")
-	flag.BoolVar(&bootstrap, "bootstrap", false, "Bootstrap cluster")
+	flag.StringVar(&cfgFile, "config", "config.json", "Config filename")
+	flag.Usage = func() {
+		fmt.Printf("Usage: %s [followerNodeID,followerRaftAddr]...\n", os.Args[0])
+		flag.PrintDefaults()
+	}
 }
 
 func main() {
 	flag.Parse()
 
-	viper.SetConfigName(configFile)
-	viper.SetConfigType("yaml")
-	viper.AddConfigPath("/etc/bikeme/")
-	viper.AddConfigPath("$HOME/.bikeme")
-	viper.AddConfigPath(".")
-	if err := viper.ReadInConfig(); err != nil {
+	data, err := os.ReadFile(cfgFile)
+	if err != nil {
 		log.Fatal(err)
 	}
 
-	var c config
-	if err := viper.Unmarshal(&c); err != nil {
+	cfg = &config{}
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		log.Fatal(err)
+	}
+
+	bs, err = newBikeStore(cfg.BikeStoreFile)
+	if err != nil {
 		log.Fatal(err)
 	}
 
@@ -66,82 +72,65 @@ func main() {
 	}
 
 	rc := raft.DefaultConfig()
-	rc.LocalID = raft.ServerID(c.NodeID)
+	rc.LocalID = raft.ServerID(cfg.NodeID)
 	rc.Logger = logger
+	rc.TrailingLogs = cfg.TrailingLogs
 
-	rc.TrailingLogs = c.TrailingLogs
-
-	store, err := newLogStore(c.LogStoreFile)
+	ls, err := newLogStore(cfg.LogStoreFile)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	cacheStore, err := raft.NewLogCache(c.LogCacheSize, store)
+	cacheStore, err := raft.NewLogCache(cfg.LogCacheSize, ls)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	rc.SnapshotInterval = c.SnapshotInterval
-	rc.SnapshotThreshold = c.SnapshotThreshold
+	rc.SnapshotInterval = parseDuration(cfg.SnapshotInterval)
+	rc.SnapshotThreshold = cfg.SnapshotThreshold
 
-	snapshotStore, err := raft.NewFileSnapshotStoreWithLogger(c.SnapshotDir, c.SnapshotRetain, logger)
+	snapshotStore, err := raft.NewFileSnapshotStoreWithLogger(cfg.SnapshotDir, cfg.SnapshotRetain, logger)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	tcpAddr, err := net.ResolveTCPAddr("tcp", c.RaftAddr)
+	tcpAddr, err := net.ResolveTCPAddr("tcp", cfg.RaftAddr)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	transport, err := raft.NewTCPTransportWithLogger(c.RaftAddr, tcpAddr, c.MaxPool, c.TCPTimeout, logger)
+	transport, err := raft.NewTCPTransportWithLogger(cfg.RaftAddr, tcpAddr, cfg.MaxPool, parseDuration(cfg.TCPTimeout), logger)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	bikeStore, err := newBikeStore(c.BikeStoreFile)
+	fs, err := newFSM(bs)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	fsmStore, err := newFSM(bikeStore)
+	cluster, err = raft.NewRaft(rc, fs, cacheStore, ls, snapshotStore, transport)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	cluster, err := raft.NewRaft(rc, fsmStore, cacheStore, store, snapshotStore, transport)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	if bootstrap {
-		configuration := raft.Configuration{
-			Servers: []raft.Server{
-				{
-					ID:      raft.ServerID(c.NodeID),
-					Address: transport.LocalAddr(),
-				},
-			},
-		}
-
-		f := cluster.BootstrapCluster(configuration)
-		if err = f.Error(); err != nil {
-			log.Fatal(err)
-		}
+	if flag.NArg() > 0 {
+		bootstrapCluster()
 	}
 
 	m := pat.New()
-	m.Get("/hello/:name", http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		io.WriteString(w, "hello, "+req.URL.Query().Get(":name")+"!\n")
-	}))
+	m.Get("/bikes", http.HandlerFunc(getBikes))
+	m.Get("/bikes/:id", http.HandlerFunc(getBikes))
+	m.Post("/bikes", http.HandlerFunc(postBike))
 
 	srv := &http.Server{
-		Addr:    c.APIAddr,
+		Addr:    cfg.APIAddr,
 		Handler: m,
 	}
 
 	go func() {
-		log.Print("Server is running")
+		log.Printf("Server is listening: %s\n", cfg.APIAddr)
+
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatal(err)
 		}
@@ -151,12 +140,51 @@ func main() {
 	signal.Notify(quit, os.Interrupt)
 	<-quit
 
-	log.Print("Server shutdown")
+	log.Print("Server is shutting down")
 
-	ctx, cancel := context.WithTimeout(context.Background(), c.Graceful)
+	ctx, cancel := context.WithTimeout(context.Background(), parseDuration(cfg.Graceful))
 	defer cancel()
 
 	if err := srv.Shutdown(ctx); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func parseDuration(s string) time.Duration {
+	d, err := time.ParseDuration(s)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return d
+}
+
+func bootstrapCluster() {
+	servers := []raft.Server{
+		{
+			ID:      raft.ServerID(cfg.NodeID),
+			Address: raft.ServerAddress(cfg.RaftAddr),
+		},
+	}
+
+	for _, follower := range flag.Args() {
+		var followerNodeID string
+		var followerRaftAddr string
+
+		if n, _ := fmt.Sscanf(follower, "%s,%s", &followerNodeID, &followerRaftAddr); n != 2 {
+			log.Fatal("invalid follower parameter")
+		}
+
+		servers = append(servers, raft.Server{
+			ID:      raft.ServerID(followerNodeID),
+			Address: raft.ServerAddress(followerRaftAddr),
+		})
+	}
+
+	f := cluster.BootstrapCluster(raft.Configuration{
+		Servers: servers,
+	})
+	if err := f.Error(); err != nil {
 		log.Fatal(err)
 	}
 }
