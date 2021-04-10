@@ -13,15 +13,15 @@ type bikeStore struct {
 }
 
 type bike struct {
-	ID         uint64
-	Name       string
-	Components []*component
+	ID         uint64       `json:"id"`
+	Name       string       `json:"name"`
+	Components []*component `json:"components"`
 }
 
 type component struct {
-	ID     uint64
-	BikeID uint64
-	Name   string
+	ID     uint64 `json:"id"`
+	BikeID uint64 `json:"bike_id"`
+	Name   string `json:"name"`
 }
 
 func newBikeStore(path string) (*bikeStore, error) {
@@ -47,7 +47,6 @@ func newBikeStore(path string) (*bikeStore, error) {
 	}, nil
 }
 
-// GetBikes Get same bikes
 func (s *bikeStore) GetBikes(limit, offset uint64, bikes []*bike) error {
 	rows, err := s.db.Query("SELECT rowid, name FROM bike LIMIT ? OFFSET ?", limit, offset)
 	if err != nil {
@@ -98,7 +97,6 @@ func (s *bikeStore) GetBikes(limit, offset uint64, bikes []*bike) error {
 	return nil
 }
 
-// GetBike Get a bike
 func (s *bikeStore) GetBike(id uint64, b *bike) error {
 	if err := s.db.QueryRow("SELECT rowid, name FROM bike WHERE rowid = ?", id).Scan(&b.ID, &b.Name); err != nil {
 		return err
@@ -123,12 +121,10 @@ func (s *bikeStore) GetBike(id uint64, b *bike) error {
 	return nil
 }
 
-// StoreBike is used to store a single bike
 func (s *bikeStore) StoreBike(b *bike) error {
 	return s.StoreBikes([]*bike{b})
 }
 
-// StoreBike is used to store a set of bikes
 func (s *bikeStore) StoreBikes(bikes []*bike) error {
 	tx, err := s.db.Begin()
 	if err != nil {
@@ -173,7 +169,6 @@ func (s *bikeStore) StoreBikes(bikes []*bike) error {
 	return tx.Commit()
 }
 
-// DeleteRange is used to delete bikes within a given range inclusively.
 func (s *bikeStore) DeleteRange(min, max uint64) error {
 	tx, err := s.db.Begin()
 	if err != nil {

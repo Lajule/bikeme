@@ -9,21 +9,20 @@ import (
 )
 
 type snapshot struct {
-	store *bikeStore
+	s *bikeStore
 }
 
 type snapshotData struct {
-	Bike *bike
-	Err  error
+	b *bike
+	err  error
 }
 
-func newSnapshot(bs *bikeStore) (*snapshot, error) {
+func newSnapshot(s *bikeStore) (*snapshot, error) {
 	return &snapshot{
-		store: bs,
+		s: s,
 	}, nil
 }
 
-// Persist Create a snapshot
 func (s *snapshot) Persist(sink raft.SnapshotSink) error {
 	defer func() {
 		if err := sink.Close(); err != nil {
@@ -44,9 +43,9 @@ func (s *snapshot) Persist(sink raft.SnapshotSink) error {
 		for {
 			bikes := []*bike{}
 
-			if err := s.store.GetBikes(500, offset, bikes); err != nil {
+			if err := s.s.GetBikes(500, offset, bikes); err != nil {
 				ch <- &snapshotData{
-					Err: err,
+					err: err,
 				}
 
 				break
@@ -54,13 +53,13 @@ func (s *snapshot) Persist(sink raft.SnapshotSink) error {
 
 			for _, b := range bikes {
 				ch <- &snapshotData{
-					Bike: b,
+					b: b,
 				}
 			}
 
 			if len(bikes) < 500 {
 				ch <- &snapshotData{
-					Err: errSnapshotFinished,
+					err: errSnapshotFinished,
 				}
 
 				break
@@ -73,15 +72,15 @@ func (s *snapshot) Persist(sink raft.SnapshotSink) error {
 	for {
 		d := <-ch
 
-		if d.Err == errSnapshotFinished {
+		if d.err == errSnapshotFinished {
 			break
 		}
 
-		if d.Err != nil {
-			return d.Err
+		if d.err != nil {
+			return d.err
 		}
 
-		data, err := json.Marshal(d.Bike)
+		data, err := json.Marshal(d.b)
 		if err != nil {
 			return err
 		}
@@ -98,7 +97,6 @@ func (s *snapshot) Persist(sink raft.SnapshotSink) error {
 	return nil
 }
 
-// Release Release a snapshot
 func (s *snapshot) Release() {
 	log.Print("[RELEASE]")
 }

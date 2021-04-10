@@ -20,7 +20,6 @@ func newSTDLogger() (hclog.Logger, error) {
 	}), nil
 }
 
-// Write Print log
 func (l *stdLogger) Write(b []byte) (int, error) {
 	l.l.Println(string(bytes.TrimRight(b, " \n\t")))
 	return len(b), nil

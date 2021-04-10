@@ -34,7 +34,6 @@ func newLogStore(path string) (*logStore, error) {
 	}, nil
 }
 
-// FirstIndex returns the first known index from the Raft log.
 func (s *logStore) FirstIndex() (uint64, error) {
 	idx := uint64(0)
 
@@ -45,7 +44,6 @@ func (s *logStore) FirstIndex() (uint64, error) {
 	return idx, nil
 }
 
-// LastIndex returns the last known index from the Raft log.
 func (s *logStore) LastIndex() (uint64, error) {
 	idx := uint64(0)
 
@@ -56,7 +54,6 @@ func (s *logStore) LastIndex() (uint64, error) {
 	return idx, nil
 }
 
-// GetLog is used to retrieve a log from BoltDB at a given index.
 func (s *logStore) GetLog(idx uint64, log *raft.Log) error {
 	v := []byte{}
 
@@ -71,19 +68,17 @@ func (s *logStore) GetLog(idx uint64, log *raft.Log) error {
 	return decodeMsgPack(v, log)
 }
 
-// StoreLog is used to store a single raft log
 func (s *logStore) StoreLog(log *raft.Log) error {
 	return s.StoreLogs([]*raft.Log{log})
 }
 
-// StoreLogs is used to store a set of raft logs
 func (s *logStore) StoreLogs(logs []*raft.Log) error {
 	tx, err := s.db.Begin()
 	if err != nil {
 		return err
 	}
 
-	stmt, err := tx.Prepare("INSERT OR REPLACE INTO log(idx, v) VALUES(?, ?)")
+	stmt, err := tx.Prepare("INSERT INTO log(idx, v) VALUES(?, ?)")
 	if err != nil {
 		return err
 	}
@@ -104,7 +99,6 @@ func (s *logStore) StoreLogs(logs []*raft.Log) error {
 	return tx.Commit()
 }
 
-// DeleteRange is used to delete logs within a given range inclusively.
 func (s *logStore) DeleteRange(min, max uint64) error {
 	if _, err := s.db.Exec("DELETE FROM log WHERE idx BETWEEN ? AND ?", min, max); err != nil {
 		return err
@@ -113,7 +107,6 @@ func (s *logStore) DeleteRange(min, max uint64) error {
 	return nil
 }
 
-// Set is used to set a key/value set outside of the raft log
 func (s *logStore) Set(k, v []byte) error {
 	if _, err := s.db.Exec("INSERT OR REPLACE INTO store(k, v) VALUES(?, ?)", bytesToUint64(k), v); err != nil {
 		return err
@@ -122,7 +115,6 @@ func (s *logStore) Set(k, v []byte) error {
 	return nil
 }
 
-// Get is used to retrieve a value from the k/v store by key
 func (s *logStore) Get(k []byte) ([]byte, error) {
 	v := []byte{}
 
@@ -137,12 +129,10 @@ func (s *logStore) Get(k []byte) ([]byte, error) {
 	return v, nil
 }
 
-// SetUint64 is like Set, but handles uint64 values
 func (s *logStore) SetUint64(key []byte, val uint64) error {
 	return s.Set(key, uint64ToBytes(val))
 }
 
-// GetUint64 is like Get, but handles uint64 values
 func (s *logStore) GetUint64(key []byte) (uint64, error) {
 	val, err := s.Get(key)
 	if err != nil {

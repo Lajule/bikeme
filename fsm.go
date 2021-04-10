@@ -9,21 +9,20 @@ import (
 )
 
 type fsm struct {
-	store *bikeStore
+	s *bikeStore
 }
 
 type fsmData struct {
-	Bike *bike
-	Err  error
+	b *bike
+	err  error
 }
 
-func newFSM(bs *bikeStore) (*fsm, error) {
+func newFSM(s *bikeStore) (*fsm, error) {
 	return &fsm{
-		store: bs,
+		s: s,
 	}, nil
 }
 
-// Apply Commit something on cluster
 func (f *fsm) Apply(l *raft.Log) interface{} {
 	log.Printf("[APPLY] log=%#v", l)
 
@@ -33,13 +32,13 @@ func (f *fsm) Apply(l *raft.Log) interface{} {
 
 		if err := json.Unmarshal(l.Data, &d); err != nil {
 			return &fsmData{
-				Err: err,
+				err: err,
 			}
 		}
 
-		if err := f.store.StoreBike(d.Bike); err != nil {
+		if err := f.s.StoreBike(d.b); err != nil {
 			return &fsmData{
-				Err: err,
+				err: err,
 			}
 		}
 
@@ -49,12 +48,10 @@ func (f *fsm) Apply(l *raft.Log) interface{} {
 	return nil
 }
 
-// Snapshot Get a snapshot
 func (f *fsm) Snapshot() (raft.FSMSnapshot, error) {
-	return newSnapshot(f.store)
+	return newSnapshot(f.s)
 }
 
-// Restore Restore a snapshot
 func (f *fsm) Restore(rClose io.ReadCloser) error {
 	defer func() {
 		if err := rClose.Close(); err != nil {
@@ -74,7 +71,7 @@ func (f *fsm) Restore(rClose io.ReadCloser) error {
 			return err
 		}
 
-		if err := f.store.StoreBike(&b); err != nil {
+		if err := f.s.StoreBike(&b); err != nil {
 			return err
 		}
 

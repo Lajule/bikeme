@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"flag"
-	"fmt"
 	"log"
 	"net"
 	"net/http"
@@ -17,38 +16,36 @@ import (
 )
 
 type config struct {
-	NodeID            string `json:"node_id"`
-	TrailingLogs      uint64 `json:"trailing_logs"`
-	LogStoreFile      string `json:"log_store_file"`
-	LogCacheSize      int    `json:"log_cache_size"`
-	SnapshotDir       string `json:"snapshot_dir"`
-	SnapshotInterval  string `json:"snapshot_interval"`
-	SnapshotThreshold uint64 `json:"snapshot_threshold"`
-	SnapshotRetain    int    `json:"snapshot_retain"`
-	RaftAddr          string `json:"raft_addr"`
-	MaxPool           int    `json:"max_pool"`
-	TCPTimeout        string `json:"tcp_timeout"`
-	BikeStoreFile     string `json:"bike_store_file"`
-	APIAddr           string `json:"api_addr"`
-	Graceful          string `json:"graceful"`
+	LocalID           string             `json:"local_id"`
+	TrailingLogs      uint64             `json:"trailing_logs"`
+	LogStoreFile      string             `json:"log_store_file"`
+	LogCacheSize      int                `json:"log_cache_size"`
+	SnapshotDir       string             `json:"snapshot_dir"`
+	SnapshotInterval  string             `json:"snapshot_interval"`
+	SnapshotThreshold uint64             `json:"snapshot_threshold"`
+	SnapshotRetain    int                `json:"snapshot_retain"`
+	RAFTAddr          string             `json:"raft_addr"`
+	MaxPool           int                `json:"max_pool"`
+	TCPTimeout        string             `json:"tcp_timeout"`
+	Configuration     raft.Configuration `json:"configuration"`
+	BikeStoreFile     string             `json:"bike_store_file"`
+	APIAddr           string             `json:"api_addr"`
+	Graceful          string             `json:"graceful"`
+}
+
+type app struct {
+	config  *config
+	cluster *raft.Raft
+	store   *bikeStore
 }
 
 var (
-	cfg     *config
-	cluster *raft.Raft
-	bs      *bikeStore
 	cfgFile string
+	bikeme  *app
 )
 
-func init() {
-	flag.StringVar(&cfgFile, "config", "config.json", "Config filename")
-	flag.Usage = func() {
-		fmt.Printf("Usage: %s [followerNodeID,followerRaftAddr]...\n", os.Args[0])
-		flag.PrintDefaults()
-	}
-}
-
 func main() {
+	flag.StringVar(&cfgFile, "config", "config.json", "Config filename")
 	flag.Parse()
 
 	data, err := os.ReadFile(cfgFile)
@@ -56,12 +53,16 @@ func main() {
 		log.Fatal(err)
 	}
 
-	cfg = &config{}
+	cfg := config{}
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		log.Fatal(err)
 	}
 
-	bs, err = newBikeStore(cfg.BikeStoreFile)
+	bikeme := &app{
+		config: &cfg,
+	}
+
+	bikeme.store, err = newBikeStore(cfg.BikeStoreFile)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -71,57 +72,69 @@ func main() {
 		log.Fatal(err)
 	}
 
-	rc := raft.DefaultConfig()
-	rc.LocalID = raft.ServerID(cfg.NodeID)
-	rc.Logger = logger
-	rc.TrailingLogs = cfg.TrailingLogs
+	c := raft.DefaultConfig()
+	c.LocalID = raft.ServerID(cfg.LocalID)
+	c.Logger = logger
+	c.TrailingLogs = cfg.TrailingLogs
 
-	ls, err := newLogStore(cfg.LogStoreFile)
+	store, err := newLogStore(cfg.LogStoreFile)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	cacheStore, err := raft.NewLogCache(cfg.LogCacheSize, ls)
+	cacheStore, err := raft.NewLogCache(cfg.LogCacheSize, store)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	rc.SnapshotInterval = parseDuration(cfg.SnapshotInterval)
-	rc.SnapshotThreshold = cfg.SnapshotThreshold
+	c.SnapshotInterval = parseDuration(cfg.SnapshotInterval)
+	c.SnapshotThreshold = cfg.SnapshotThreshold
 
 	snapshotStore, err := raft.NewFileSnapshotStoreWithLogger(cfg.SnapshotDir, cfg.SnapshotRetain, logger)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	tcpAddr, err := net.ResolveTCPAddr("tcp", cfg.RaftAddr)
+	tcpAddr, err := net.ResolveTCPAddr("tcp", cfg.RAFTAddr)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	transport, err := raft.NewTCPTransportWithLogger(cfg.RaftAddr, tcpAddr, cfg.MaxPool, parseDuration(cfg.TCPTimeout), logger)
+	transport, err := raft.NewTCPTransportWithLogger(cfg.RAFTAddr, tcpAddr, cfg.MaxPool, parseDuration(cfg.TCPTimeout), logger)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	fs, err := newFSM(bs)
+	f, err := newFSM(bikeme.store)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	cluster, err = raft.NewRaft(rc, fs, cacheStore, ls, snapshotStore, transport)
+	bikeme.cluster, err = raft.NewRaft(c, f, cacheStore, store, snapshotStore, transport)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	if flag.NArg() > 0 {
-		bootstrapCluster()
+	if len(cfg.Configuration.Servers) > 0 {
+		log.Print("Cluster is bootstraping")
+
+		future := bikeme.cluster.BootstrapCluster(cfg.Configuration)
+
+		if err := future.Error(); err != nil {
+			log.Fatal(err)
+		}
 	}
 
 	m := pat.New()
-	m.Get("/bikes", http.HandlerFunc(getBikes))
-	m.Get("/bikes/:id", http.HandlerFunc(getBikes))
-	m.Post("/bikes", http.HandlerFunc(postBike))
+	m.Get("/bikes", &getBikesHandler{
+		s: bikeme.store,
+	})
+	m.Get("/bikes/:id", &getBikeHandler{
+		s: bikeme.store,
+	})
+	m.Post("/bikes", &postBikeHandler{
+		s: bikeme.store,
+	})
 
 	srv := &http.Server{
 		Addr:    cfg.APIAddr,
@@ -157,34 +170,4 @@ func parseDuration(s string) time.Duration {
 	}
 
 	return d
-}
-
-func bootstrapCluster() {
-	servers := []raft.Server{
-		{
-			ID:      raft.ServerID(cfg.NodeID),
-			Address: raft.ServerAddress(cfg.RaftAddr),
-		},
-	}
-
-	for _, follower := range flag.Args() {
-		var followerNodeID string
-		var followerRaftAddr string
-
-		if n, _ := fmt.Sscanf(follower, "%s,%s", &followerNodeID, &followerRaftAddr); n != 2 {
-			log.Fatal("invalid follower parameter")
-		}
-
-		servers = append(servers, raft.Server{
-			ID:      raft.ServerID(followerNodeID),
-			Address: raft.ServerAddress(followerRaftAddr),
-		})
-	}
-
-	f := cluster.BootstrapCluster(raft.Configuration{
-		Servers: servers,
-	})
-	if err := f.Error(); err != nil {
-		log.Fatal(err)
-	}
 }
