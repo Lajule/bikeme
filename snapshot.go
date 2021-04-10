@@ -42,8 +42,7 @@ func (s *snapshot) Persist(sink raft.SnapshotSink) error {
 
 		for {
 			bikes := []*bike{}
-
-			if err := s.s.GetBikes(500, offset, bikes); err != nil {
+			if err := s.s.GetBikes(500, offset, &bikes); err != nil {
 				ch <- &snapshotData{
 					err: err,
 				}

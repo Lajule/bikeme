@@ -47,8 +47,8 @@ func newBikeStore(path string) (*bikeStore, error) {
 	}, nil
 }
 
-func (s *bikeStore) GetBikes(limit, offset uint64, bikes []*bike) error {
-	rows, err := s.db.Query("SELECT rowid, name FROM bike LIMIT ? OFFSET ?", limit, offset)
+func (s *bikeStore) GetBikes(limit, offset uint64, bikes *[]*bike) error {
+	rows, err := s.db.Query("SELECT rowid, name FROM bike ORDER BY rowid DESC LIMIT ? OFFSET ?", limit, offset)
 	if err != nil {
 		return err
 	}
@@ -63,7 +63,7 @@ func (s *bikeStore) GetBikes(limit, offset uint64, bikes []*bike) error {
 			return err
 		}
 
-		bikes = append(bikes, &b)
+		*bikes = append(*bikes, &b)
 
 		bikeIds = append(bikeIds, fmt.Sprint(b.ID))
 	}
@@ -86,7 +86,7 @@ func (s *bikeStore) GetBikes(limit, offset uint64, bikes []*bike) error {
 		components = append(components, &c)
 	}
 
-	for _, b := range bikes {
+	for _, b := range *bikes {
 		for _, c := range components {
 			if b.ID == c.BikeID {
 				b.Components = append(b.Components, c)
