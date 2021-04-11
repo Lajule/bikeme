@@ -137,7 +137,7 @@ func main() {
 
 	srv := &http.Server{
 		Addr:    config.APIAddr,
-		Handler: m,
+		Handler: cors(m),
 	}
 
 	go func() {
