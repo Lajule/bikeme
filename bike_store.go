@@ -54,8 +54,7 @@ func (s *bikeStore) GetBikes(limit, offset uint64, bikes *[]*bike) error {
 	}
 	defer rows.Close()
 
-	bikeIds := []string{}
-
+	bikeIDs := []string{}
 	for rows.Next() {
 		b := bike{}
 
@@ -63,19 +62,18 @@ func (s *bikeStore) GetBikes(limit, offset uint64, bikes *[]*bike) error {
 			return err
 		}
 
-		*bikes = append(*bikes, &b)
+		bikeIDs = append(bikeIDs, fmt.Sprint(b.ID))
 
-		bikeIds = append(bikeIds, fmt.Sprint(b.ID))
+		*bikes = append(*bikes, &b)
 	}
 
-	rows, err = s.db.Query(fmt.Sprintf("SELECT rowid, bike_rowid, name FROM component WHERE bike_rowid IN (%s)", strings.Join(bikeIds, ",")))
+	rows, err = s.db.Query(fmt.Sprintf("SELECT rowid, bike_rowid, name FROM component WHERE bike_rowid IN (%s)", strings.Join(bikeIDs, ",")))
 	if err != nil {
 		return err
 	}
 	defer rows.Close()
 
 	components := []*component{}
-
 	for rows.Next() {
 		c := component{}
 
@@ -142,13 +140,11 @@ func (s *bikeStore) StoreBikes(bikes []*bike) error {
 			tx.Rollback()
 			return err
 		}
-	}
 
-	var id uint64
-
-	if err := tx.QueryRow("SELECT last_insert_rowid()").Scan(&id); err != nil {
-		tx.Rollback()
-		return err
+		if err := tx.QueryRow("SELECT last_insert_rowid()").Scan(&b.ID); err != nil {
+			tx.Rollback()
+			return err
+		}
 	}
 
 	stmt, err = tx.Prepare("INSERT INTO component(bike_rowid, name) VALUES(?, ?)")
@@ -159,7 +155,14 @@ func (s *bikeStore) StoreBikes(bikes []*bike) error {
 
 	for _, b := range bikes {
 		for _, c := range b.Components {
-			if _, err := stmt.Exec(id, c.Name); err != nil {
+			c.BikeID = b.ID
+
+			if _, err := stmt.Exec(c.BikeID, c.Name); err != nil {
+				tx.Rollback()
+				return err
+			}
+
+			if err := tx.QueryRow("SELECT last_insert_rowid()").Scan(&c.ID); err != nil {
 				tx.Rollback()
 				return err
 			}

@@ -9,15 +9,15 @@ import (
 )
 
 type getBikesHandler struct {
-	s *bikeStore
+	a *application
 }
 
 type getBikeHandler struct {
-	s *bikeStore
+	a *application
 }
 
 type postBikeHandler struct {
-	s *bikeStore
+	a *application
 }
 
 func (h *getBikesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -36,7 +36,7 @@ func (h *getBikesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	bikes := []*bike{}
-	if err := h.s.GetBikes(limit, offset, &bikes); err != nil {
+	if err := h.a.store.GetBikes(limit, offset, &bikes); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		io.WriteString(w, err.Error())
 		return
@@ -63,7 +63,7 @@ func (h *getBikeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	b := bike{}
-	if err := h.s.GetBike(id, &b); err != nil {
+	if err := h.a.store.GetBike(id, &b); err != nil {
 		if err == sql.ErrNoRows {
 			w.WriteHeader(http.StatusBadRequest)
 		} else {
@@ -86,20 +86,35 @@ func (h *getBikeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *postBikeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	decoder := json.NewDecoder(r.Body)
-
-	b := bike{}
-	if err := decoder.Decode(&b); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		io.WriteString(w, err.Error())
-		return
-	}
-
-	if err := h.s.StoreBike(&b); err != nil {
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		io.WriteString(w, err.Error())
 		return
 	}
 
+	future := h.a.cluster.Apply(body, parseDuration(h.a.config.TCPTimeout))
+	if err := future.Error(); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		io.WriteString(w, err.Error())
+		return
+	}
+
+	rep := future.Response()
+	if err := rep.(*applyResponse).err; err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		io.WriteString(w, err.Error())
+		return
+	}
+
+	data, err := json.Marshal(rep.(*applyResponse).b)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		io.WriteString(w, err.Error())
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
+	io.WriteString(w, string(data))
 }

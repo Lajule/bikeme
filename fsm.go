@@ -12,9 +12,9 @@ type fsm struct {
 	s *bikeStore
 }
 
-type fsmData struct {
-	b *bike
-	err  error
+type applyResponse struct {
+	b   *bike
+	err error
 }
 
 func newFSM(s *bikeStore) (*fsm, error) {
@@ -28,21 +28,22 @@ func (f *fsm) Apply(l *raft.Log) interface{} {
 
 	switch l.Type {
 	case raft.LogCommand:
-		d := fsmData{}
-
-		if err := json.Unmarshal(l.Data, &d); err != nil {
-			return &fsmData{
+		b := bike{}
+		if err := json.Unmarshal(l.Data, &b); err != nil {
+			return &applyResponse{
 				err: err,
 			}
 		}
 
-		if err := f.s.StoreBike(d.b); err != nil {
-			return &fsmData{
+		if err := f.s.StoreBike(&b); err != nil {
+			return &applyResponse{
 				err: err,
 			}
 		}
 
-		return &d
+		return &applyResponse{
+			b: &b,
+		}
 	}
 
 	return nil

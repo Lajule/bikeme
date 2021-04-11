@@ -15,7 +15,7 @@ import (
 	"github.com/hashicorp/raft"
 )
 
-type config struct {
+type configuration struct {
 	LocalID           string             `json:"local_id"`
 	TrailingLogs      uint64             `json:"trailing_logs"`
 	LogStoreFile      string             `json:"log_store_file"`
@@ -33,36 +33,36 @@ type config struct {
 	Graceful          string             `json:"graceful"`
 }
 
-type app struct {
-	config  *config
+type application struct {
+	config  *configuration
 	cluster *raft.Raft
 	store   *bikeStore
 }
 
 var (
-	cfgFile string
-	bikeme  *app
+	configFile string
+	app        *application
 )
 
 func main() {
-	flag.StringVar(&cfgFile, "config", "config.json", "Config filename")
+	flag.StringVar(&configFile, "config", "config.json", "Config filename")
 	flag.Parse()
 
-	data, err := os.ReadFile(cfgFile)
+	data, err := os.ReadFile(configFile)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	cfg := config{}
-	if err := json.Unmarshal(data, &cfg); err != nil {
+	config := configuration{}
+	if err := json.Unmarshal(data, &config); err != nil {
 		log.Fatal(err)
 	}
 
-	bikeme := &app{
-		config: &cfg,
+	app := &application{
+		config: &config,
 	}
 
-	bikeme.store, err = newBikeStore(cfg.BikeStoreFile)
+	app.store, err = newBikeStore(config.BikeStoreFile)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -73,53 +73,52 @@ func main() {
 	}
 
 	c := raft.DefaultConfig()
-	c.LocalID = raft.ServerID(cfg.LocalID)
+	c.LocalID = raft.ServerID(config.LocalID)
 	c.Logger = logger
-	c.TrailingLogs = cfg.TrailingLogs
+	c.TrailingLogs = config.TrailingLogs
 
-	store, err := newLogStore(cfg.LogStoreFile)
+	store, err := newLogStore(config.LogStoreFile)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	cacheStore, err := raft.NewLogCache(cfg.LogCacheSize, store)
+	cacheStore, err := raft.NewLogCache(config.LogCacheSize, store)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	c.SnapshotInterval = parseDuration(cfg.SnapshotInterval)
-	c.SnapshotThreshold = cfg.SnapshotThreshold
+	c.SnapshotInterval = parseDuration(config.SnapshotInterval)
+	c.SnapshotThreshold = config.SnapshotThreshold
 
-	snapshotStore, err := raft.NewFileSnapshotStoreWithLogger(cfg.SnapshotDir, cfg.SnapshotRetain, logger)
+	snapshotStore, err := raft.NewFileSnapshotStoreWithLogger(config.SnapshotDir, config.SnapshotRetain, logger)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	tcpAddr, err := net.ResolveTCPAddr("tcp", cfg.RAFTAddr)
+	tcpAddr, err := net.ResolveTCPAddr("tcp", config.RAFTAddr)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	transport, err := raft.NewTCPTransportWithLogger(cfg.RAFTAddr, tcpAddr, cfg.MaxPool, parseDuration(cfg.TCPTimeout), logger)
+	transport, err := raft.NewTCPTransportWithLogger(config.RAFTAddr, tcpAddr, config.MaxPool, parseDuration(config.TCPTimeout), logger)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	f, err := newFSM(bikeme.store)
+	f, err := newFSM(app.store)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	bikeme.cluster, err = raft.NewRaft(c, f, cacheStore, store, snapshotStore, transport)
+	app.cluster, err = raft.NewRaft(c, f, cacheStore, store, snapshotStore, transport)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	if len(cfg.Configuration.Servers) > 0 {
+	if len(config.Configuration.Servers) > 0 {
 		log.Print("Cluster is bootstraping")
 
-		future := bikeme.cluster.BootstrapCluster(cfg.Configuration)
-
+		future := app.cluster.BootstrapCluster(config.Configuration)
 		if err := future.Error(); err != nil {
 			log.Fatal(err)
 		}
@@ -127,22 +126,22 @@ func main() {
 
 	m := pat.New()
 	m.Get("/bikes", &getBikesHandler{
-		s: bikeme.store,
+		a: app,
 	})
 	m.Get("/bikes/:id", &getBikeHandler{
-		s: bikeme.store,
+		a: app,
 	})
 	m.Post("/bikes", &postBikeHandler{
-		s: bikeme.store,
+		a: app,
 	})
 
 	srv := &http.Server{
-		Addr:    cfg.APIAddr,
+		Addr:    config.APIAddr,
 		Handler: m,
 	}
 
 	go func() {
-		log.Printf("Server is listening: %s\n", cfg.APIAddr)
+		log.Printf("Server is listening: %s\n", config.APIAddr)
 
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatal(err)
@@ -155,7 +154,7 @@ func main() {
 
 	log.Print("Server is shutting down")
 
-	ctx, cancel := context.WithTimeout(context.Background(), parseDuration(cfg.Graceful))
+	ctx, cancel := context.WithTimeout(context.Background(), parseDuration(config.Graceful))
 	defer cancel()
 
 	if err := srv.Shutdown(ctx); err != nil {

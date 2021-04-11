@@ -14,7 +14,7 @@
       "servers": [
         {
 	  "id": "node1",
-	  "address": "127.0.0.1:3000"
+	  "address": "127.0.0.1:3001"
 	},
 	{
 	  "suffrage": 1,

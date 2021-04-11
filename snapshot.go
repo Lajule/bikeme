@@ -8,13 +8,15 @@ import (
 	"github.com/hashicorp/raft"
 )
 
+const limit = 500
+
 type snapshot struct {
 	s *bikeStore
 }
 
 type snapshotData struct {
-	b *bike
-	err  error
+	b   *bike
+	err error
 }
 
 func newSnapshot(s *bikeStore) (*snapshot, error) {
@@ -42,7 +44,7 @@ func (s *snapshot) Persist(sink raft.SnapshotSink) error {
 
 		for {
 			bikes := []*bike{}
-			if err := s.s.GetBikes(500, offset, &bikes); err != nil {
+			if err := s.s.GetBikes(limit, offset, &bikes); err != nil {
 				ch <- &snapshotData{
 					err: err,
 				}
