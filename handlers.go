@@ -27,8 +27,34 @@ type postBikeHandler struct {
 }
 
 func (h *indexHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	limit, err := strconv.ParseUint(r.URL.Query().Get("limit"), 10, 64)
+	if err != nil {
+		limit = uint64(50)
+	}
+
+	offset, err := strconv.ParseUint(r.URL.Query().Get("offset"), 10, 64)
+	if err != nil {
+		offset = uint64(50)
+	}
+
+	data := struct {
+		Limit uint64
+		Offset uint64
+		Bikes []*bike
+	}{
+		Limit: limit,
+		Offset: offset,
+		Bikes: []*bike{},
+	}
+
+	if err := h.a.store.GetBikes(50, 0, &data.Bikes); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		io.WriteString(w, err.Error())
+		return
+	}
+
 	w.WriteHeader(http.StatusOK)
-	h.t.Execute(w, nil)
+	h.t.Execute(w, data)
 }
 
 func (h *getBikesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {

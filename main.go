@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
-	_ "embed"
+	"embed"
 	"flag"
 	"html/template"
 	"log"
@@ -42,8 +42,8 @@ type application struct {
 }
 
 var (
-	//go:embed index.tmpl
-	index string
+	//go:embed *.tmpl
+	content embed.FS
 
 	configFile string
 
@@ -130,22 +130,26 @@ func main() {
 		}
 	}
 
-	template, err := template.New("index").Parse(index)
+	tmpl, err := template.ParseFS(content, "*.tmpl")
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	m := pat.New()
+
 	m.Get("/", &indexHandler{
 		a: app,
-		t: template,
+		t: tmpl,
 	})
+
 	m.Get("/bikes", &getBikesHandler{
 		a: app,
 	})
+
 	m.Get("/bikes/:id", &getBikeHandler{
 		a: app,
 	})
+
 	m.Post("/bikes", &postBikeHandler{
 		a: app,
 	})

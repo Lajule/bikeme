@@ -2,11 +2,22 @@
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>Bikeme</title>
-  <link rel="icon" href="static/favicon.ico" />
+  <title>bikeme</title>
 </head>
 <body>
-  <script>
-  </script>
+  <ol>
+    {{range $i, $b := .Bikes}}
+    <li>
+      {{$b.Name}}
+      <ul>
+	{{range $j, $c := $b.Components}}
+	<li>
+	  {{$c.Name}}
+	</li>
+	{{end}}
+      </ul>
+    </li>
+  {{end}}
+  </ol>
 </body>
 </html>
