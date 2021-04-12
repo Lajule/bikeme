@@ -3,10 +3,16 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
+	"html/template"
 	"io"
 	"net/http"
 	"strconv"
 )
+
+type indexHandler struct {
+	a *application
+	t *template.Template
+}
 
 type getBikesHandler struct {
 	a *application
@@ -18,6 +24,11 @@ type getBikeHandler struct {
 
 type postBikeHandler struct {
 	a *application
+}
+
+func (h *indexHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+	h.t.Execute(w, nil)
 }
 
 func (h *getBikesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {

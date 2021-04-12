@@ -3,7 +3,9 @@ package main
 import (
 	"context"
 	"encoding/json"
+	_ "embed"
 	"flag"
+	"html/template"
 	"log"
 	"net"
 	"net/http"
@@ -40,8 +42,12 @@ type application struct {
 }
 
 var (
+	//go:embed index.tmpl
+	index string
+
 	configFile string
-	app        *application
+
+	app *application
 )
 
 func main() {
@@ -124,7 +130,16 @@ func main() {
 		}
 	}
 
+	template, err := template.New("index").Parse(index)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	m := pat.New()
+	m.Get("/", &indexHandler{
+		a: app,
+		t: template,
+	})
 	m.Get("/bikes", &getBikesHandler{
 		a: app,
 	})
