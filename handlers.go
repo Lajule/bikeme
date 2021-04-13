@@ -34,20 +34,20 @@ func (h *indexHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	offset, err := strconv.ParseUint(r.URL.Query().Get("offset"), 10, 64)
 	if err != nil {
-		offset = uint64(50)
+		offset = uint64(0)
 	}
 
 	data := struct {
-		Limit uint64
+		Limit  uint64
 		Offset uint64
-		Bikes []*bike
+		Bikes  []*bike
 	}{
-		Limit: limit,
-		Offset: offset,
-		Bikes: []*bike{},
+		Limit:  limit,
+		Offset: limit + offset,
+		Bikes:  []*bike{},
 	}
 
-	if err := h.a.store.GetBikes(50, 0, &data.Bikes); err != nil {
+	if err := h.a.store.GetBikes(limit, offset, &data.Bikes); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		io.WriteString(w, err.Error())
 		return

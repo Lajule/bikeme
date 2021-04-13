@@ -5,19 +5,22 @@
   <title>bikeme</title>
 </head>
 <body>
-  <ol>
+  <h1>bikeme</h1>
+  <ul>
     {{range $i, $b := .Bikes}}
     <li>
-      {{$b.Name}}
+      {{$b.ID}} - {{$b.Name}}
       <ul>
 	{{range $j, $c := $b.Components}}
 	<li>
-	  {{$c.Name}}
+	  {{$c.ID}} - {{$c.Name}}
 	</li>
 	{{end}}
       </ul>
     </li>
     {{end}}
-  </ol>
+  </ul>
+  <a href="/?limit={{.Limit}}&offset=0">first</a>
+  <a href="/?limit={{.Limit}}&offset={{.Offset}}">next</a>
 </body>
 </html>

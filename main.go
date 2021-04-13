@@ -2,8 +2,8 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"embed"
+	"encoding/json"
 	"flag"
 	"html/template"
 	"log"
@@ -42,19 +42,22 @@ type application struct {
 }
 
 var (
-	//go:embed *.tmpl
-	content embed.FS
+	version = "development"
 
-	configFile string
+	bootstrap = flag.Bool("b", false, "Bootstrap cluster")
 
-	app *application
+	cfgFile = flag.String("c", "config.json", "Config filename")
 )
 
+//go:embed *.tmpl
+var content embed.FS
+
 func main() {
-	flag.StringVar(&configFile, "config", "config.json", "Config filename")
+	log.Printf("bikeme %s\n", version)
+
 	flag.Parse()
 
-	data, err := os.ReadFile(configFile)
+	data, err := os.ReadFile(*cfgFile)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -121,7 +124,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	if len(config.Configuration.Servers) > 0 {
+	if *bootstrap {
 		log.Print("Cluster is bootstraping")
 
 		future := app.cluster.BootstrapCluster(config.Configuration)
