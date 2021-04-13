@@ -9,24 +9,29 @@ import (
 	"strconv"
 )
 
-type indexHandler struct {
-	a *application
-	t *template.Template
+// IndexHandler renders the index page.
+type IndexHandler struct {
+	Application *Application
+	Template    *template.Template
 }
 
-type getBikesHandler struct {
-	a *application
+// GetBikesHandler is a REST handler.
+type GetBikesHandler struct {
+	Application *Application
 }
 
-type getBikeHandler struct {
-	a *application
+// GetBikeHandler is a REST handler.
+type GetBikeHandler struct {
+	Application *Application
 }
 
-type postBikeHandler struct {
-	a *application
+// PostBikesHandler is REST handler.
+type PostBikeHandler struct {
+	Application *Application
 }
 
-func (h *indexHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+// ServeHTTP handles GET call.
+func (h *IndexHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	limit, err := strconv.ParseUint(r.URL.Query().Get("limit"), 10, 64)
 	if err != nil {
 		limit = uint64(50)
@@ -40,24 +45,25 @@ func (h *indexHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	data := struct {
 		Limit  uint64
 		Offset uint64
-		Bikes  []*bike
+		Bikes  []*Bike
 	}{
 		Limit:  limit,
 		Offset: limit + offset,
-		Bikes:  []*bike{},
+		Bikes:  []*Bike{},
 	}
 
-	if err := h.a.store.GetBikes(limit, offset, &data.Bikes); err != nil {
+	if err := h.Application.BikeStore.GetBikes(limit, offset, &data.Bikes); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		io.WriteString(w, err.Error())
 		return
 	}
 
 	w.WriteHeader(http.StatusOK)
-	h.t.Execute(w, data)
+	h.Template.Execute(w, data)
 }
 
-func (h *getBikesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+// ServeHTTP handles GET call.
+func (h *GetBikesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	limit, err := strconv.ParseUint(r.URL.Query().Get("limit"), 10, 64)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -72,14 +78,14 @@ func (h *getBikesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	bikes := []*bike{}
-	if err := h.a.store.GetBikes(limit, offset, &bikes); err != nil {
+	bikes := []*Bike{}
+	if err := h.Application.BikeStore.GetBikes(limit, offset, &bikes); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		io.WriteString(w, err.Error())
 		return
 	}
 
-	data, err := json.Marshal(bikes)
+	resp, err := json.Marshal(bikes)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		io.WriteString(w, err.Error())
@@ -88,10 +94,11 @@ func (h *getBikesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	io.WriteString(w, string(data))
+	io.WriteString(w, string(resp))
 }
 
-func (h *getBikeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+// ServeHTTP handles GET call.
+func (h *GetBikeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseUint(r.URL.Query().Get(":id"), 10, 64)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -99,8 +106,8 @@ func (h *getBikeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	b := bike{}
-	if err := h.a.store.GetBike(id, &b); err != nil {
+	bike := Bike{}
+	if err := h.Application.BikeStore.GetBike(id, &bike); err != nil {
 		if err == sql.ErrNoRows {
 			w.WriteHeader(http.StatusBadRequest)
 		} else {
@@ -110,7 +117,7 @@ func (h *getBikeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data, err := json.Marshal(b)
+	resp, err := json.Marshal(bike)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		io.WriteString(w, err.Error())
@@ -119,10 +126,11 @@ func (h *getBikeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	io.WriteString(w, string(data))
+	io.WriteString(w, string(resp))
 }
 
-func (h *postBikeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+// ServeHTTP handle POST call.
+func (h *PostBikeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -130,21 +138,21 @@ func (h *postBikeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	future := h.a.cluster.Apply(body, parseDuration(h.a.config.TCPTimeout))
+	future := h.Application.Cluster.Apply(body, parseDuration(h.Application.Configuration.TCPTimeout))
 	if err := future.Error(); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		io.WriteString(w, err.Error())
 		return
 	}
 
-	rep := future.Response()
-	if err := rep.(*applyResponse).err; err != nil {
+	futureResponse := future.Response()
+	if err := futureResponse.(*ApplyResponse).Err; err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		io.WriteString(w, err.Error())
 		return
 	}
 
-	data, err := json.Marshal(rep.(*applyResponse).b)
+	resp, err := json.Marshal(futureResponse.(*ApplyResponse).Bike)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		io.WriteString(w, err.Error())
@@ -153,5 +161,5 @@ func (h *postBikeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	io.WriteString(w, string(data))
+	io.WriteString(w, string(resp))
 }

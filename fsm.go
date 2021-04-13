@@ -8,52 +8,58 @@ import (
 	"github.com/hashicorp/raft"
 )
 
-type fsm struct {
-	s *bikeStore
+// FSM is the Raft FSM.
+type FSM struct {
+	BikeStore *BikeStore
 }
 
-type applyResponse struct {
-	b   *bike
-	err error
+// ApplyResponse is to get Apply future response.
+type ApplyResponse struct {
+	Bike *Bike
+	Err  error
 }
 
-func newFSM(s *bikeStore) (*fsm, error) {
-	return &fsm{
-		s: s,
+// NewFSM creates a FSM.
+func NewFSM(bikeStore *BikeStore) (*FSM, error) {
+	return &FSM{
+		BikeStore: bikeStore,
 	}, nil
 }
 
-func (f *fsm) Apply(l *raft.Log) interface{} {
+// Apply stores the bike contained in the log.
+func (fsm *FSM) Apply(l *raft.Log) interface{} {
 	log.Printf("[APPLY] log=%#v", l)
 
 	switch l.Type {
 	case raft.LogCommand:
-		b := bike{}
-		if err := json.Unmarshal(l.Data, &b); err != nil {
-			return &applyResponse{
-				err: err,
+		bike := Bike{}
+		if err := json.Unmarshal(l.Data, &bike); err != nil {
+			return &ApplyResponse{
+				Err: err,
 			}
 		}
 
-		if err := f.s.StoreBike(&b); err != nil {
-			return &applyResponse{
-				err: err,
+		if err := fsm.BikeStore.StoreBike(&bike); err != nil {
+			return &ApplyResponse{
+				Err: err,
 			}
 		}
 
-		return &applyResponse{
-			b: &b,
+		return &ApplyResponse{
+			Bike: &bike,
 		}
 	}
 
 	return nil
 }
 
-func (f *fsm) Snapshot() (raft.FSMSnapshot, error) {
-	return newSnapshot(f.s)
+// Snapshot creates a snapshot.
+func (fsm *FSM) Snapshot() (raft.FSMSnapshot, error) {
+	return NewSnapshot(fsm.BikeStore)
 }
 
-func (f *fsm) Restore(rClose io.ReadCloser) error {
+// Restore store some bikes from a snapshot.
+func (fsm *FSM) Restore(rClose io.ReadCloser) error {
 	defer func() {
 		if err := rClose.Close(); err != nil {
 			log.Fatal(err.Error())
@@ -66,13 +72,13 @@ func (f *fsm) Restore(rClose io.ReadCloser) error {
 
 	decoder := json.NewDecoder(rClose)
 	for decoder.More() {
-		b := bike{}
+		bike := Bike{}
 
-		if err := decoder.Decode(&b); err != nil {
+		if err := decoder.Decode(&bike); err != nil {
 			return err
 		}
 
-		if err := f.s.StoreBike(&b); err != nil {
+		if err := fsm.BikeStore.StoreBike(&bike); err != nil {
 			return err
 		}
 

@@ -8,24 +8,29 @@ import (
 	"github.com/hashicorp/raft"
 )
 
-const limit = 500
+// Limit is the batch size to select bikes from database.
+const Limit = 500
 
-type snapshot struct {
-	s *bikeStore
+// Snapshot is Raft snapshot.
+type Snapshot struct {
+	BikeStore *BikeStore
 }
 
-type snapshotData struct {
-	b   *bike
-	err error
+// SnapshotData gives access to the snapshot data.
+type SnapshotData struct {
+	Bike *Bike
+	Err  error
 }
 
-func newSnapshot(s *bikeStore) (*snapshot, error) {
-	return &snapshot{
-		s: s,
+// NewSnapshot creates a snapshot.
+func NewSnapshot(bikeStore *BikeStore) (*Snapshot, error) {
+	return &Snapshot{
+		BikeStore: bikeStore,
 	}, nil
 }
 
-func (s *snapshot) Persist(sink raft.SnapshotSink) error {
+// Persist persists a snapshot.
+func (s *Snapshot) Persist(sink raft.SnapshotSink) error {
 	defer func() {
 		if err := sink.Close(); err != nil {
 			log.Fatal(err.Error())
@@ -36,31 +41,31 @@ func (s *snapshot) Persist(sink raft.SnapshotSink) error {
 
 	persisted := 0
 
-	ch := make(chan *snapshotData, 500)
+	ch := make(chan *SnapshotData, 500)
 	errSnapshotFinished := errors.New("snapshot finished")
 
 	go func() {
 		offset := uint64(0)
 
 		for {
-			bikes := []*bike{}
-			if err := s.s.GetBikes(limit, offset, &bikes); err != nil {
-				ch <- &snapshotData{
-					err: err,
+			bikes := []*Bike{}
+			if err := s.BikeStore.GetBikes(Limit, offset, &bikes); err != nil {
+				ch <- &SnapshotData{
+					Err: err,
 				}
 
 				break
 			}
 
-			for _, b := range bikes {
-				ch <- &snapshotData{
-					b: b,
+			for _, bike := range bikes {
+				ch <- &SnapshotData{
+					Bike: bike,
 				}
 			}
 
 			if len(bikes) < 500 {
-				ch <- &snapshotData{
-					err: errSnapshotFinished,
+				ch <- &SnapshotData{
+					Err: errSnapshotFinished,
 				}
 
 				break
@@ -71,17 +76,17 @@ func (s *snapshot) Persist(sink raft.SnapshotSink) error {
 	}()
 
 	for {
-		d := <-ch
+		snapshotData := <-ch
 
-		if d.err == errSnapshotFinished {
+		if snapshotData.Err == errSnapshotFinished {
 			break
 		}
 
-		if d.err != nil {
-			return d.err
+		if snapshotData.Err != nil {
+			return snapshotData.Err
 		}
 
-		data, err := json.Marshal(d.b)
+		data, err := json.Marshal(snapshotData.Bike)
 		if err != nil {
 			return err
 		}
@@ -98,6 +103,7 @@ func (s *snapshot) Persist(sink raft.SnapshotSink) error {
 	return nil
 }
 
-func (s *snapshot) Release() {
+// Release releases a snapshot.
+func (s *Snapshot) Release() {
 	log.Print("[RELEASE]")
 }

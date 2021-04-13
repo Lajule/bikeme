@@ -8,23 +8,27 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-type bikeStore struct {
-	db *sql.DB
+// BikeStore is a sqlite3 database.
+type BikeStore struct {
+	DB *sql.DB
 }
 
-type bike struct {
+// Bike is used to store bikes in database.
+type Bike struct {
 	ID         uint64       `json:"id"`
 	Name       string       `json:"name"`
-	Components []*component `json:"components"`
+	Components []*Component `json:"components"`
 }
 
-type component struct {
+// Component is a part of a bike.
+type Component struct {
 	ID     uint64 `json:"id"`
 	BikeID uint64 `json:"bike_id"`
 	Name   string `json:"name"`
 }
 
-func newBikeStore(path string) (*bikeStore, error) {
+// NewBikeStore creates a database.
+func NewBikeStore(path string) (*BikeStore, error) {
 	db, err := sql.Open("sqlite3", path)
 	if err != nil {
 		return nil, err
@@ -42,13 +46,14 @@ func newBikeStore(path string) (*bikeStore, error) {
 		return nil, err
 	}
 
-	return &bikeStore{
-		db: db,
+	return &BikeStore{
+		DB: db,
 	}, nil
 }
 
-func (s *bikeStore) GetBikes(limit, offset uint64, bikes *[]*bike) error {
-	rows, err := s.db.Query("SELECT rowid, name FROM bike ORDER BY rowid DESC LIMIT ? OFFSET ?", limit, offset)
+// GetBikes selects bikes from database.
+func (bs *BikeStore) GetBikes(limit, offset uint64, bikes *[]*Bike) error {
+	rows, err := bs.DB.Query("SELECT rowid, name FROM bike ORDER BY rowid DESC LIMIT ? OFFSET ?", limit, offset)
 	if err != nil {
 		return err
 	}
@@ -56,7 +61,7 @@ func (s *bikeStore) GetBikes(limit, offset uint64, bikes *[]*bike) error {
 
 	bikeIDs := []string{}
 	for rows.Next() {
-		b := bike{}
+		b := Bike{}
 
 		if err := rows.Scan(&b.ID, &b.Name); err != nil {
 			return err
@@ -67,27 +72,27 @@ func (s *bikeStore) GetBikes(limit, offset uint64, bikes *[]*bike) error {
 		*bikes = append(*bikes, &b)
 	}
 
-	rows, err = s.db.Query(fmt.Sprintf("SELECT rowid, bike_rowid, name FROM component WHERE bike_rowid IN (%s)", strings.Join(bikeIDs, ",")))
+	rows, err = bs.DB.Query(fmt.Sprintf("SELECT rowid, bike_rowid, name FROM component WHERE bike_rowid IN (%s)", strings.Join(bikeIDs, ",")))
 	if err != nil {
 		return err
 	}
 	defer rows.Close()
 
-	components := []*component{}
+	components := []*Component{}
 	for rows.Next() {
-		c := component{}
+		component := Component{}
 
-		if err := rows.Scan(&c.ID, &c.BikeID, &c.Name); err != nil {
+		if err := rows.Scan(&component.ID, &component.BikeID, &component.Name); err != nil {
 			return err
 		}
 
-		components = append(components, &c)
+		components = append(components, &component)
 	}
 
-	for _, b := range *bikes {
-		for _, c := range components {
-			if b.ID == c.BikeID {
-				b.Components = append(b.Components, c)
+	for _, bike := range *bikes {
+		for _, component := range components {
+			if bike.ID == component.BikeID {
+				bike.Components = append(bike.Components, component)
 			}
 		}
 	}
@@ -95,36 +100,39 @@ func (s *bikeStore) GetBikes(limit, offset uint64, bikes *[]*bike) error {
 	return nil
 }
 
-func (s *bikeStore) GetBike(id uint64, b *bike) error {
-	if err := s.db.QueryRow("SELECT rowid, name FROM bike WHERE rowid = ?", id).Scan(&b.ID, &b.Name); err != nil {
+// GetBike get a bike from database.
+func (bs *BikeStore) GetBike(id uint64, bike *Bike) error {
+	if err := bs.DB.QueryRow("SELECT rowid, name FROM bike WHERE rowid = ?", id).Scan(&bike.ID, &bike.Name); err != nil {
 		return err
 	}
 
-	rows, err := s.db.Query("SELECT rowid, bike_rowid, name FROM component WHERE bike_rowid = ?", id)
+	rows, err := bs.DB.Query("SELECT rowid, bike_rowid, name FROM component WHERE bike_rowid = ?", id)
 	if err != nil {
 		return err
 	}
 	defer rows.Close()
 
 	for rows.Next() {
-		c := component{}
+		component := Component{}
 
-		if err := rows.Scan(&c.ID, &c.BikeID, &c.Name); err != nil {
+		if err := rows.Scan(&component.ID, &component.BikeID, &component.Name); err != nil {
 			return err
 		}
 
-		b.Components = append(b.Components, &c)
+		bike.Components = append(bike.Components, &component)
 	}
 
 	return nil
 }
 
-func (s *bikeStore) StoreBike(b *bike) error {
-	return s.StoreBikes([]*bike{b})
+// StoreBike inserts a bike into the database.
+func (bs *BikeStore) StoreBike(bike *Bike) error {
+	return bs.StoreBikes([]*Bike{bike})
 }
 
-func (s *bikeStore) StoreBikes(bikes []*bike) error {
-	tx, err := s.db.Begin()
+// StoreBikes inserts some bikes into the database.
+func (bs *BikeStore) StoreBikes(bikes []*Bike) error {
+	tx, err := bs.DB.Begin()
 	if err != nil {
 		return err
 	}
@@ -135,13 +143,13 @@ func (s *bikeStore) StoreBikes(bikes []*bike) error {
 		return err
 	}
 
-	for _, b := range bikes {
-		if _, err := stmt.Exec(b.Name); err != nil {
+	for _, bike := range bikes {
+		if _, err := stmt.Exec(bike.Name); err != nil {
 			tx.Rollback()
 			return err
 		}
 
-		if err := tx.QueryRow("SELECT last_insert_rowid()").Scan(&b.ID); err != nil {
+		if err := tx.QueryRow("SELECT last_insert_rowid()").Scan(&bike.ID); err != nil {
 			tx.Rollback()
 			return err
 		}
@@ -153,16 +161,16 @@ func (s *bikeStore) StoreBikes(bikes []*bike) error {
 		return err
 	}
 
-	for _, b := range bikes {
-		for _, c := range b.Components {
-			c.BikeID = b.ID
+	for _, bike := range bikes {
+		for _, component := range bike.Components {
+			component.BikeID = bike.ID
 
-			if _, err := stmt.Exec(c.BikeID, c.Name); err != nil {
+			if _, err := stmt.Exec(component.BikeID, component.Name); err != nil {
 				tx.Rollback()
 				return err
 			}
 
-			if err := tx.QueryRow("SELECT last_insert_rowid()").Scan(&c.ID); err != nil {
+			if err := tx.QueryRow("SELECT last_insert_rowid()").Scan(&component.ID); err != nil {
 				tx.Rollback()
 				return err
 			}
@@ -172,18 +180,19 @@ func (s *bikeStore) StoreBikes(bikes []*bike) error {
 	return tx.Commit()
 }
 
-func (s *bikeStore) DeleteRange(min, max uint64) error {
-	tx, err := s.db.Begin()
+// DeleteRange deletes some bikes.
+func (bs *BikeStore) DeleteRange(min, max uint64) error {
+	tx, err := bs.DB.Begin()
 	if err != nil {
 		return err
 	}
 
-	if _, err := s.db.Exec("DELETE FROM bike WHERE rowid BETWEEN ? AND ?", min, max); err != nil {
+	if _, err := bs.DB.Exec("DELETE FROM bike WHERE rowid BETWEEN ? AND ?", min, max); err != nil {
 		tx.Rollback()
 		return err
 	}
 
-	if _, err := s.db.Exec("DELETE FROM component WHERE bike_rowid BETWEEN ? AND ?", min, max); err != nil {
+	if _, err := bs.DB.Exec("DELETE FROM component WHERE bike_rowid BETWEEN ? AND ?", min, max); err != nil {
 		tx.Rollback()
 		return err
 	}

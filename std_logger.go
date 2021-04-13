@@ -7,20 +7,23 @@ import (
 	"github.com/hashicorp/go-hclog"
 )
 
-type stdLogger struct {
+// STDLogger wraps a standard logger.
+type STDLogger struct {
 	l *log.Logger
 }
 
-func newSTDLogger() (hclog.Logger, error) {
+// NewSTDLogger creates a logger.
+func NewSTDLogger() (hclog.Logger, error) {
 	return hclog.New(&hclog.LoggerOptions{
 		DisableTime: true,
-		Output: &stdLogger{
+		Output: &STDLogger{
 			l: log.Default(),
 		},
 	}), nil
 }
 
-func (l *stdLogger) Write(b []byte) (int, error) {
+// Write prints log.
+func (l *STDLogger) Write(b []byte) (int, error) {
 	l.l.Println(string(bytes.TrimRight(b, " \n\t")))
 	return len(b), nil
 }
