@@ -86,10 +86,10 @@ func main() {
 		log.Fatal(err)
 	}
 
-	raftConfiguration := raft.DefaultConfig()
-	raftConfiguration.LocalID = raft.ServerID(configuration.LocalID)
-	raftConfiguration.Logger = logger
-	raftConfiguration.TrailingLogs = configuration.TrailingLogs
+	raftConfig := raft.DefaultConfig()
+	raftConfig.LocalID = raft.ServerID(configuration.LocalID)
+	raftConfig.Logger = logger
+	raftConfig.TrailingLogs = configuration.TrailingLogs
 
 	logStore, err := NewLogStore(configuration.LogStoreFile)
 	if err != nil {
@@ -101,8 +101,8 @@ func main() {
 		log.Fatal(err)
 	}
 
-	raftConfiguration.SnapshotInterval = parseDuration(configuration.SnapshotInterval)
-	raftConfiguration.SnapshotThreshold = configuration.SnapshotThreshold
+	raftConfig.SnapshotInterval = parseDuration(configuration.SnapshotInterval)
+	raftConfig.SnapshotThreshold = configuration.SnapshotThreshold
 
 	snapshotStore, err := raft.NewFileSnapshotStoreWithLogger(configuration.SnapshotDir, configuration.SnapshotRetain, logger)
 	if err != nil {
@@ -124,7 +124,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	application.Cluster, err = raft.NewRaft(raftConfiguration, fsm, cacheStore, logStore, snapshotStore, transport)
+	application.Cluster, err = raft.NewRaft(raftConfig, fsm, cacheStore, logStore, snapshotStore, transport)
 	if err != nil {
 		log.Fatal(err)
 	}
