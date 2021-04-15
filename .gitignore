@@ -14,8 +14,11 @@
 # Dependency directories (remove the comment below to include it)
 # vendor/
 
-# Sores
+# Stores
 *.db
+
+# Snapshots
+snapshots/
 
 # Config
 config.json
