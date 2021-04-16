@@ -34,7 +34,7 @@ func NewBikeStore(path string) (*BikeStore, error) {
 		return nil, err
 	}
 
-	if _, err = db.Exec(`CREATE TABLE IF NOT EXISTS bike(name TEXT NOT NULL)`); err != nil {
+	if _, err = db.Exec("CREATE TABLE IF NOT EXISTS bike(name TEXT NOT NULL)"); err != nil {
 		return nil, err
 	}
 
