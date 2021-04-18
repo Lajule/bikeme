@@ -22,6 +22,6 @@
     }
   ],
   "bike_store_file":"bike.db",
-  "api_addr":"127.0.0.1:8001",
+  "api_addr":":8001",
   "graceful":"5s"
 }
