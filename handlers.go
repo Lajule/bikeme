@@ -15,22 +15,7 @@ type IndexHandler struct {
 	Template    *template.Template
 }
 
-// GetBikesHandler is a REST handler.
-type GetBikesHandler struct {
-	Application *Application
-}
-
-// GetBikeHandler is a REST handler.
-type GetBikeHandler struct {
-	Application *Application
-}
-
-// PostBikesHandler is REST handler.
-type PostBikeHandler struct {
-	Application *Application
-}
-
-// ServeHTTP handles GET call.
+// ServeHTTP handles GET /.
 func (h *IndexHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	limit, err := strconv.ParseUint(r.URL.Query().Get("limit"), 10, 64)
 	if err != nil {
@@ -62,7 +47,12 @@ func (h *IndexHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.Template.Execute(w, data)
 }
 
-// ServeHTTP handles GET call.
+// GetBikesHandler is a REST handler.
+type GetBikesHandler struct {
+	Application *Application
+}
+
+// ServeHTTP handles GET /bikes.
 func (h *GetBikesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	limit, err := strconv.ParseUint(r.URL.Query().Get("limit"), 10, 64)
 	if err != nil {
@@ -97,7 +87,12 @@ func (h *GetBikesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	io.WriteString(w, string(resp))
 }
 
-// ServeHTTP handles GET call.
+// GetBikeHandler is a REST handler.
+type GetBikeHandler struct {
+	Application *Application
+}
+
+// ServeHTTP handles GET /bikes/:id.
 func (h *GetBikeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseUint(r.URL.Query().Get(":id"), 10, 64)
 	if err != nil {
@@ -129,7 +124,12 @@ func (h *GetBikeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	io.WriteString(w, string(resp))
 }
 
-// ServeHTTP handle POST call.
+// PostBikesHandler is a REST handler.
+type PostBikeHandler struct {
+	Application *Application
+}
+
+// ServeHTTP handle POST /bikes.
 func (h *PostBikeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
