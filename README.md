@@ -11,7 +11,7 @@ go build
 ## Docker image
 
 ```sh
-docker build --build-arg VERSION=1.0 -t bikeme:1.0 .
+docker build --build-arg version=1.0 -t bikeme:1.0 .
 ```
 
 Run a container with following :
