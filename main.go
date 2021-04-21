@@ -191,8 +191,8 @@ func main() {
 		log.Fatal(err)
 	}
 
-	future := application.Cluster.Shutdown()
-	if err := future.Error(); err != nil {
+	shutdown := application.Cluster.Shutdown()
+	if err := shutdown.Error(); err != nil {
 		log.Fatal(err)
 	}
 

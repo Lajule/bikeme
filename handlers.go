@@ -142,21 +142,21 @@ func (h *PostBikeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	future := h.Application.Cluster.Apply(body, parseDuration(h.Application.Configuration.TCPTimeout))
-	if err := future.Error(); err != nil {
+	apply := h.Application.Cluster.Apply(body, 0)
+	if err := apply.Error(); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		io.WriteString(w, err.Error())
 		return
 	}
 
-	futureResponse := future.Response()
-	if err := futureResponse.(*ApplyResponse).Err; err != nil {
+	applyResponse := apply.Response()
+	if err := applyResponse.(*ApplyResponse).Err; err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		io.WriteString(w, err.Error())
 		return
 	}
 
-	resp, err := json.Marshal(futureResponse.(*ApplyResponse).Bike)
+	resp, err := json.Marshal(applyResponse.(*ApplyResponse).Bike)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		io.WriteString(w, err.Error())
