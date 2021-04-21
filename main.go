@@ -13,7 +13,7 @@ import (
 	"os/signal"
 	"time"
 
-	"github.com/bmizerany/pat"
+	"github.com/gorilla/mux"
 	"github.com/hashicorp/raft"
 )
 
@@ -145,28 +145,29 @@ func main() {
 		log.Fatal(err)
 	}
 
-	m := pat.New()
+	r := mux.NewRouter()
+	r.Use(CORS)
 
-	m.Get("/", &IndexHandler{
+	r.Handle("/", &IndexHandler{
 		Application: application,
 		Template:    tmpl,
-	})
+	}).Methods(http.MethodGet)
 
-	m.Get("/bikes", &GetBikesHandler{
+	r.Handle("/bikes", &GetBikesHandler{
 		Application: application,
-	})
+	}).Methods(http.MethodGet)
 
-	m.Get("/bikes/:id", &GetBikeHandler{
+	r.Handle("/bikes/{id:[0-9]+}", &GetBikeHandler{
 		Application: application,
-	})
+	}).Methods(http.MethodGet)
 
-	m.Post("/bikes", &PostBikeHandler{
+	r.Handle("/bikes", &PostBikeHandler{
 		Application: application,
-	})
+	}).Methods(http.MethodPost)
 
 	srv := &http.Server{
 		Addr:    configuration.APIAddr,
-		Handler: CORS(m),
+		Handler: r,
 	}
 
 	go func() {
@@ -187,6 +188,11 @@ func main() {
 	defer cancel()
 
 	if err := srv.Shutdown(ctx); err != nil {
+		log.Fatal(err)
+	}
+
+	future := application.Cluster.Shutdown()
+	if err := future.Error(); err != nil {
 		log.Fatal(err)
 	}
 

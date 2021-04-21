@@ -7,6 +7,8 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+
+	"github.com/gorilla/mux"
 )
 
 // IndexHandler renders the index page.
@@ -94,7 +96,9 @@ type GetBikeHandler struct {
 
 // ServeHTTP handles GET /bikes/:id.
 func (h *GetBikeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.ParseUint(r.URL.Query().Get(":id"), 10, 64)
+	vars := mux.Vars(r)
+
+	id, err := strconv.ParseUint(vars["id"], 10, 64)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		io.WriteString(w, err.Error())

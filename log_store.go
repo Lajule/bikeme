@@ -85,7 +85,7 @@ func (ls *LogStore) StoreLogs(logs []*raft.Log) error {
 		return err
 	}
 
-	stmt, err := tx.Prepare("INSERT INTO log(idx, v) VALUES(?, ?)")
+	stmt, err := tx.Prepare("INSERT OR REPLACE INTO log(idx, v) VALUES(?, ?)")
 	if err != nil {
 		return err
 	}

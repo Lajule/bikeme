@@ -73,7 +73,6 @@ func (fsm *FSM) Restore(rClose io.ReadCloser) error {
 	decoder := json.NewDecoder(rClose)
 	for decoder.More() {
 		bike := Bike{}
-
 		if err := decoder.Decode(&bike); err != nil {
 			return err
 		}
