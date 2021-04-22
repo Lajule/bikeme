@@ -1,27 +1,28 @@
 {
-  "local_id":"node1",
-  "trailing_logs":5,
-  "log_store_file":"log.db",
-  "log_cache_size":16,
-  "snapshot_dir":"snapshots",
-  "snapshot_interval":"20s",
-  "snapshot_threshold":10,
-  "snapshot_retain":1,
-  "raft_addr":"127.0.0.1:3001",
-  "max_pool":3,
-  "tcp_timeout":"3s",
-  "servers":[
+  "local_id": "node1",
+  "trailing_logs": 5,
+  "log_store_file": "log.db",
+  "log_cache_size": 16,
+  "snapshot_dir": "snapshots",
+  "snapshot_interval": "20s",
+  "snapshot_threshold": 10,
+  "snapshot_retain": 1,
+  "no_snapshot_restore_on_start": false,
+  "raft_addr": "127.0.0.1:3001",
+  "max_pool": 3,
+  "tcp_timeout": "3s",
+  "servers": [
     {
-      "id":"node1",
-      "address":"127.0.0.1:3001"
+      "id": "node1",
+      "address": "127.0.0.1:3001"
     },
     {
-      "suffrage":1,
-      "id":"node2",
-      "address":"127.0.0.1:3002"
+      "suffrage": 1,
+      "id": "node2",
+      "address": "127.0.0.1:3002"
     }
   ],
-  "bike_store_file":"bike.db",
-  "api_addr":":8001",
-  "graceful":"5s"
+  "bike_store_file": "bike.db",
+  "api_addr": ":8001",
+  "graceful": "5s"
 }

@@ -19,28 +19,29 @@ import (
 
 // Configuration is used to load the configuration file.
 type Configuration struct {
-	LocalID           string        `json:"local_id"`
-	TrailingLogs      uint64        `json:"trailing_logs"`
-	LogStoreFile      string        `json:"log_store_file"`
-	LogCacheSize      int           `json:"log_cache_size"`
-	SnapshotDir       string        `json:"snapshot_dir"`
-	SnapshotInterval  string        `json:"snapshot_interval"`
-	SnapshotThreshold uint64        `json:"snapshot_threshold"`
-	SnapshotRetain    int           `json:"snapshot_retain"`
-	RAFTAddr          string        `json:"raft_addr"`
-	MaxPool           int           `json:"max_pool"`
-	TCPTimeout        string        `json:"tcp_timeout"`
-	Servers           []raft.Server `json:"servers"`
-	BikeStoreFile     string        `json:"bike_store_file"`
-	APIAddr           string        `json:"api_addr"`
-	Graceful          string        `json:"graceful"`
+	LocalID                  string        `json:"local_id"`
+	TrailingLogs             uint64        `json:"trailing_logs"`
+	LogStoreFile             string        `json:"log_store_file"`
+	LogCacheSize             int           `json:"log_cache_size"`
+	SnapshotDir              string        `json:"snapshot_dir"`
+	SnapshotInterval         string        `json:"snapshot_interval"`
+	SnapshotThreshold        uint64        `json:"snapshot_threshold"`
+	SnapshotRetain           int           `json:"snapshot_retain"`
+	NoSnapshotRestoreOnStart bool          `json:"no_snapshot_restore_on_start"`
+	RAFTAddr                 string        `json:"raft_addr"`
+	MaxPool                  int           `json:"max_pool"`
+	TCPTimeout               string        `json:"tcp_timeout"`
+	Servers                  []raft.Server `json:"servers"`
+	BikeStoreFile            string        `json:"bike_store_file"`
+	APIAddr                  string        `json:"api_addr"`
+	Graceful                 string        `json:"graceful"`
 }
 
 // Application gives access to the configuration, the Raft cluster and the bike store.
 type Application struct {
-	Configuration *Configuration
-	Cluster       *raft.Raft
-	BikeStore     *BikeStore
+	Config    *Configuration
+	Cluster   *raft.Raft
+	BikeStore *BikeStore
 }
 
 var (
@@ -62,69 +63,65 @@ func main() {
 
 	flag.Parse()
 
+	app := &Application{}
+
 	data, err := os.ReadFile(*ConfigFile)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	configuration := Configuration{}
-	if err := json.Unmarshal(data, &configuration); err != nil {
+	if err := json.Unmarshal(data, app.Config); err != nil {
 		log.Fatal(err)
 	}
 
-	application := &Application{
-		Configuration: &configuration,
-	}
-
-	application.BikeStore, err = NewBikeStore(configuration.BikeStoreFile)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	logger, err := NewSTDLogger()
+	app.BikeStore, err = NewBikeStore(app.Config.BikeStoreFile)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	raftConfig := raft.DefaultConfig()
-	raftConfig.LocalID = raft.ServerID(configuration.LocalID)
-	raftConfig.Logger = logger
-	raftConfig.TrailingLogs = configuration.TrailingLogs
+	raftConfig.LocalID = raft.ServerID(app.Config.LocalID)
+	raftConfig.TrailingLogs = app.Config.TrailingLogs
+	raftConfig.SnapshotInterval = parseDuration(app.Config.SnapshotInterval)
+	raftConfig.SnapshotThreshold = app.Config.SnapshotThreshold
+	raftConfig.NoSnapshotRestoreOnStart = app.Config.NoSnapshotRestoreOnStart
 
-	logStore, err := NewLogStore(configuration.LogStoreFile)
+	raftConfig.Logger, err = NewSTDLogger()
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	cacheStore, err := raft.NewLogCache(configuration.LogCacheSize, logStore)
+	logStore, err := NewLogStore(app.Config.LogStoreFile)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	raftConfig.SnapshotInterval = parseDuration(configuration.SnapshotInterval)
-	raftConfig.SnapshotThreshold = configuration.SnapshotThreshold
-
-	snapshotStore, err := raft.NewFileSnapshotStoreWithLogger(configuration.SnapshotDir, configuration.SnapshotRetain, logger)
+	cacheStore, err := raft.NewLogCache(app.Config.LogCacheSize, logStore)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	tcpAddr, err := net.ResolveTCPAddr("tcp", configuration.RAFTAddr)
+	snapshotStore, err := raft.NewFileSnapshotStoreWithLogger(app.Config.SnapshotDir, app.Config.SnapshotRetain, raftConfig.Logger)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	transport, err := raft.NewTCPTransportWithLogger(configuration.RAFTAddr, tcpAddr, configuration.MaxPool, parseDuration(configuration.TCPTimeout), logger)
+	tcpAddr, err := net.ResolveTCPAddr("tcp", app.Config.RAFTAddr)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	fsm, err := NewFSM(application.BikeStore)
+	transport, err := raft.NewTCPTransportWithLogger(app.Config.RAFTAddr, tcpAddr, app.Config.MaxPool, parseDuration(app.Config.TCPTimeout), raftConfig.Logger)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	application.Cluster, err = raft.NewRaft(raftConfig, fsm, cacheStore, logStore, snapshotStore, transport)
+	fsm, err := NewFSM(app.BikeStore)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	app.Cluster, err = raft.NewRaft(raftConfig, fsm, cacheStore, logStore, snapshotStore, transport)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -132,8 +129,8 @@ func main() {
 	if *Bootstrap {
 		log.Print("Bootstrapping cluster")
 
-		future := application.Cluster.BootstrapCluster(raft.Configuration{
-			Servers: configuration.Servers,
+		future := app.Cluster.BootstrapCluster(raft.Configuration{
+			Servers: app.Config.Servers,
 		})
 		if err := future.Error(); err != nil {
 			log.Fatal(err)
@@ -149,29 +146,29 @@ func main() {
 	r.Use(CORS)
 
 	r.Handle("/", &IndexHandler{
-		Application: application,
+		Application: app,
 		Template:    tmpl,
 	}).Methods(http.MethodGet)
 
 	r.Handle("/bikes", &GetBikesHandler{
-		Application: application,
+		Application: app,
 	}).Methods(http.MethodGet)
 
 	r.Handle("/bikes/{id:[0-9]+}", &GetBikeHandler{
-		Application: application,
+		Application: app,
 	}).Methods(http.MethodGet)
 
 	r.Handle("/bikes", &PostBikeHandler{
-		Application: application,
+		Application: app,
 	}).Methods(http.MethodPost)
 
 	srv := &http.Server{
-		Addr:    configuration.APIAddr,
+		Addr:    app.Config.APIAddr,
 		Handler: r,
 	}
 
 	go func() {
-		log.Printf("Listening %s\n", configuration.APIAddr)
+		log.Printf("Listening %s\n", app.Config.APIAddr)
 
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatal(err)
@@ -184,14 +181,14 @@ func main() {
 
 	log.Print("Shutting down server")
 
-	ctx, cancel := context.WithTimeout(context.Background(), parseDuration(configuration.Graceful))
+	ctx, cancel := context.WithTimeout(context.Background(), parseDuration(app.Config.Graceful))
 	defer cancel()
 
 	if err := srv.Shutdown(ctx); err != nil {
 		log.Fatal(err)
 	}
 
-	shutdown := application.Cluster.Shutdown()
+	shutdown := app.Cluster.Shutdown()
 	if err := shutdown.Error(); err != nil {
 		log.Fatal(err)
 	}
