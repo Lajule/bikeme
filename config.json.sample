@@ -1,7 +1,7 @@
 {
   "local_id": "node1",
   "trailing_logs": 5,
-  "log_store_file": "log.db",
+  "log_store_file": "logs.db",
   "log_cache_size": 16,
   "snapshot_dir": "snapshots",
   "snapshot_interval": "20s",
@@ -10,7 +10,7 @@
   "no_snapshot_restore_on_start": false,
   "raft_addr": "127.0.0.1:3001",
   "max_pool": 3,
-  "tcp_timeout": "3s",
+  "tcp_timeout": "1s",
   "servers": [
     {
       "id": "node1",
@@ -22,7 +22,7 @@
       "address": "127.0.0.1:3002"
     }
   ],
-  "bike_store_file": "bike.db",
+  "bike_store_file": "bikes.db",
   "api_addr": ":8001",
   "graceful": "5s"
 }

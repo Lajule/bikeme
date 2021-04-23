@@ -63,7 +63,21 @@ func main() {
 
 	flag.Parse()
 
-	app := &Application{}
+	app := &Application{
+		Config: &Configuration{
+			TrailingLogs: 5,
+			LogStoreFile: "logs.db",
+			LogCacheSize: 16,
+			SnapshotDir: "snapshots",
+			SnapshotInterval: "20s",
+			SnapshotThreshold: 10,
+			SnapshotRetain: 1,
+			NoSnapshotRestoreOnStart: false,
+			MaxPool: 3,
+			TCPTimeout: "1s",
+			Graceful: "5s",
+		},
+	}
 
 	data, err := os.ReadFile(*ConfigFile)
 	if err != nil {
