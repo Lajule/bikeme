@@ -1,14 +1,18 @@
 package main
 
 import (
+	"bytes"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"html/template"
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gorilla/mux"
+	"github.com/hashicorp/raft"
 )
 
 // IndexHandler renders the index page.
@@ -142,28 +146,59 @@ func (h *PostBikeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	apply := h.Application.Cluster.Apply(body, 0)
-	if err := apply.Error(); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		io.WriteString(w, err.Error())
-		return
-	}
+	if h.Application.Cluster.State() == raft.Leader {
+		apply := h.Application.Cluster.Apply(body, 0)
+		if err := apply.Error(); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			io.WriteString(w, err.Error())
+			return
+		}
 
-	applyResponse := apply.Response()
-	if err := applyResponse.(*ApplyResponse).Err; err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		io.WriteString(w, err.Error())
-		return
-	}
+		applyResponse := apply.Response()
+		if err := applyResponse.(*ApplyResponse).Err; err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			io.WriteString(w, err.Error())
+			return
+		}
 
-	resp, err := json.Marshal(applyResponse.(*ApplyResponse).Bike)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		io.WriteString(w, err.Error())
-		return
-	}
+		resp, err := json.Marshal(applyResponse.(*ApplyResponse).Bike)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			io.WriteString(w, err.Error())
+			return
+		}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	io.WriteString(w, string(resp))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		io.WriteString(w, string(resp))
+	} else {
+		leader := strings.Split(string(h.Application.Cluster.Leader()), ":")
+		api := strings.Split(h.Application.Config.APIAddr, ":")
+
+		req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("http://%s:%s%s", leader[0], api[1], r.URL.Path), bytes.NewBuffer(body))
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			io.WriteString(w, err.Error())
+			return
+		}
+
+		client := http.Client{}
+		resp, err := client.Do(req)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			io.WriteString(w, err.Error())
+			return
+		}
+
+		respBody, err := io.ReadAll(resp.Body)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			io.WriteString(w, err.Error())
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(resp.StatusCode)
+		io.WriteString(w, string(respBody))
+	}
 }

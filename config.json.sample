@@ -19,10 +19,10 @@
     {
       "suffrage": 1,
       "id": "node2",
-      "address": "127.0.0.1:3002"
+      "address": "127.0.0.2:3001"
     }
   ],
   "bike_store_file": "bikes.db",
-  "api_addr": ":8001",
+  "api_addr": "127.0.0.1:8001",
   "graceful": "5s"
 }

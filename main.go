@@ -120,12 +120,12 @@ func main() {
 		log.Fatal(err)
 	}
 
-	tcpAddr, err := net.ResolveTCPAddr("tcp", app.Config.RAFTAddr)
+	raftAddr, err := net.ResolveTCPAddr("tcp", app.Config.RAFTAddr)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	transport, err := raft.NewTCPTransportWithLogger(app.Config.RAFTAddr, tcpAddr, app.Config.MaxPool, parseDuration(app.Config.TCPTimeout), raftConfig.Logger)
+	transport, err := raft.NewTCPTransportWithLogger(app.Config.RAFTAddr, raftAddr, app.Config.MaxPool, parseDuration(app.Config.TCPTimeout), raftConfig.Logger)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -175,6 +175,15 @@ func main() {
 	r.Handle("/bikes", &PostBikeHandler{
 		Application: app,
 	}).Methods(http.MethodPost)
+
+	apiAddr, err := net.ResolveTCPAddr("tcp", app.Config.APIAddr)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if apiAddr.IP == nil || apiAddr.IP.IsUnspecified() {
+		log.Fatal("local bind address is not advertisable")
+	}
 
 	srv := &http.Server{
 		Addr:    app.Config.APIAddr,
