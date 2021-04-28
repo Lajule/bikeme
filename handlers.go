@@ -173,9 +173,7 @@ func (h *PostBikeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		io.WriteString(w, string(resp))
 	} else {
 		leader := strings.Split(string(h.Application.Cluster.Leader()), ":")
-		api := strings.Split(h.Application.Config.APIAddr, ":")
-
-		req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("http://%s:%s%s", leader[0], api[1], r.URL.Path), bytes.NewBuffer(body))
+		req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("http://%s:%d%s", leader[0], h.Application.Config.APIPort, r.URL.Path), bytes.NewBuffer(body))
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			io.WriteString(w, err.Error())

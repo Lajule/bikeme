@@ -1,6 +1,6 @@
 {
   "local_id": "node1",
-  "raft_addr": "node1:3001",
+  "hostname": "node1",
   "servers": [
     {
       "id": "node1",
@@ -14,6 +14,5 @@
       "id": "node3",
       "address": "node3:3001"
     }
-  ],
-  "api_addr": "node1:8001"
+  ]
 }

@@ -1,5 +1,4 @@
 {
   "local_id": "node2",
-  "raft_addr": "node2:3001",
-  "api_addr": "node2:8001"
+  "hostname": "node2"
 }

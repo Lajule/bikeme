@@ -5,6 +5,7 @@ import (
 	"embed"
 	"encoding/json"
 	"flag"
+	"fmt"
 	"html/template"
 	"log"
 	"net"
@@ -20,6 +21,7 @@ import (
 // Configuration is used to load the configuration file.
 type Configuration struct {
 	LocalID                  string        `json:"local_id"`
+	Hostname                 string        `json:"hostname"`
 	TrailingLogs             uint64        `json:"trailing_logs"`
 	LogStoreFile             string        `json:"log_store_file"`
 	LogCacheSize             int           `json:"log_cache_size"`
@@ -28,12 +30,12 @@ type Configuration struct {
 	SnapshotThreshold        uint64        `json:"snapshot_threshold"`
 	SnapshotRetain           int           `json:"snapshot_retain"`
 	NoSnapshotRestoreOnStart bool          `json:"no_snapshot_restore_on_start"`
-	RAFTAddr                 string        `json:"raft_addr"`
+	RAFTPort                 int           `json:"raft_port"`
 	MaxPool                  int           `json:"max_pool"`
 	TCPTimeout               string        `json:"tcp_timeout"`
 	Servers                  []raft.Server `json:"servers"`
 	BikeStoreFile            string        `json:"bike_store_file"`
-	APIAddr                  string        `json:"api_addr"`
+	APIPort                  int           `json:"api_port"`
 	Graceful                 string        `json:"graceful"`
 }
 
@@ -65,17 +67,20 @@ func main() {
 
 	app := &Application{
 		Config: &Configuration{
-			TrailingLogs: 5,
-			LogStoreFile: "logs.db",
-			LogCacheSize: 16,
-			SnapshotDir: "snapshots",
-			SnapshotInterval: "20s",
-			SnapshotThreshold: 10,
-			SnapshotRetain: 1,
+			Hostname:                 "127.0.0.1",
+			TrailingLogs:             5,
+			LogStoreFile:             "logs.db",
+			LogCacheSize:             16,
+			SnapshotDir:              "snapshots",
+			SnapshotInterval:         "20s",
+			SnapshotThreshold:        10,
+			SnapshotRetain:           1,
 			NoSnapshotRestoreOnStart: false,
-			MaxPool: 3,
-			TCPTimeout: "1s",
-			Graceful: "5s",
+			RAFTPort:                 3001,
+			MaxPool:                  3,
+			TCPTimeout:               "1s",
+			APIPort:                  8001,
+			Graceful:                 "5s",
 		},
 	}
 
@@ -120,12 +125,13 @@ func main() {
 		log.Fatal(err)
 	}
 
-	raftAddr, err := net.ResolveTCPAddr("tcp", app.Config.RAFTAddr)
+	bindAddr := fmt.Sprintf("%s:%d", app.Config.Hostname, app.Config.RAFTPort)
+	advertise, err := net.ResolveTCPAddr("tcp", bindAddr)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	transport, err := raft.NewTCPTransportWithLogger(app.Config.RAFTAddr, raftAddr, app.Config.MaxPool, parseDuration(app.Config.TCPTimeout), raftConfig.Logger)
+	transport, err := raft.NewTCPTransportWithLogger(bindAddr, advertise, app.Config.MaxPool, parseDuration(app.Config.TCPTimeout), raftConfig.Logger)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -176,22 +182,13 @@ func main() {
 		Application: app,
 	}).Methods(http.MethodPost)
 
-	apiAddr, err := net.ResolveTCPAddr("tcp", app.Config.APIAddr)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	if apiAddr.IP == nil || apiAddr.IP.IsUnspecified() {
-		log.Fatal("local bind address is not advertisable")
-	}
-
 	srv := &http.Server{
-		Addr:    app.Config.APIAddr,
+		Addr:    fmt.Sprintf("%s:%d", app.Config.Hostname, app.Config.APIPort),
 		Handler: r,
 	}
 
 	go func() {
-		log.Printf("Listening %s\n", app.Config.APIAddr)
+		log.Printf("Listening %d\n", app.Config.APIPort)
 
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatal(err)
