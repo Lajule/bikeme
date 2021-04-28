@@ -24,6 +24,7 @@ services:
     labels:
       - traefik.enable=true
       - traefik.http.services.node1.loadbalancer.server.port=8001
+      - traefik.http.routers.node1.rule=Host(`bikeme`)
       - traefik.http.routers.node1.entryPoints=insecure
     networks:
       - cluster
@@ -34,6 +35,7 @@ services:
     labels:
       - traefik.enable=true
       - traefik.http.services.node2.loadbalancer.server.port=8001
+      - traefik.http.routers.node2.rule=Host(`bikeme`)
       - traefik.http.routers.node2.entryPoints=insecure
     networks:
       - cluster
@@ -44,6 +46,7 @@ services:
     labels:
       - traefik.enable=true
       - traefik.http.services.node3.loadbalancer.server.port=8001
+      - traefik.http.routers.node3.rule=Host(`bikeme`)
       - traefik.http.routers.node3.entryPoints=insecure
     networks:
       - cluster
