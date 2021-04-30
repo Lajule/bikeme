@@ -188,6 +188,8 @@ func (h *PostBikeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		defer resp.Body.Close()
+
 		respBody, err := io.ReadAll(resp.Body)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)

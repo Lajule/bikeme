@@ -163,6 +163,7 @@ func main() {
 	}
 
 	r := mux.NewRouter()
+	r.Use(Logger)
 	r.Use(CORS)
 
 	r.Handle("/", &IndexHandler{
